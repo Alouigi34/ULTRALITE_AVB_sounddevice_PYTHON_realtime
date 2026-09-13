@@ -1,7 +1,7 @@
 # Two speakers, two microphones, real-time
 
 `two_spk_two_mic.py` — plays 2 signals out of 2 speakers and records 2
-microphones through one full-duplex `sounddevice` callback on an ASIO card.
+microphones through one full-duplex `sounddevice` callback on an ASIO card (tested on ULTRALITE AVB soundcard).
 
 Structure is the same as the WFS reproduction loop it came from:
 `blocksize = data_length`, one working-rate sample handled per callback. The
