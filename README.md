@@ -3,11 +3,6 @@
 `two_spk_two_mic.py` — plays 2 signals out of 2 speakers and records 2
 microphones through one full-duplex `sounddevice` callback on an ASIO card (tested on ULTRALITE AVB soundcard).
 
-Structure is the same as the WFS reproduction loop it came from:
-`blocksize = data_length`, one working-rate sample handled per callback. The
-card runs at `samplerate` (48 kHz), the signal chain runs at
-`samplerate / data_length` (24 kHz), and each output sample is held across the
-whole block.
 
 ## Requirements
 
