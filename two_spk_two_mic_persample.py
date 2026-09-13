@@ -1,28 +1,34 @@
 # -*- coding: utf-8 -*-
+"""
+Drive 2 speakers, record 2 microphones, one real-time callback.
+blocksize = data_length, one working-rate sample per callback.
+"""
 
-import threading
 import numpy as np
 import sounddevice as sd
 from scipy.io import wavfile
 
 # ----------------------------------------------------------------------
-DEVICE           = 15
-SPEAKER_CHANNELS = [1, 2]
-MIC_CHANNELS     = [1, 0]
-USE_ASIO         = True
-
-SAMPLERATE       = 48000
-DATA_LENGTH      = 2                       # blocksize, and the decimation factor
-WORK_RATE        = SAMPLERATE // DATA_LENGTH   # 24000
-DURATION         = 10.0
-
-OUT_GAIN         = 0.3
-REC_AMPLITUDE    = 1.0
+# CONFIG
 # ----------------------------------------------------------------------
+device           = 15
+speakers         = [1, 2]      # ASIO output channels
+microphones      = [1, 0]      # ASIO input channels
+
+samplerate       = 48000
+data_length      = 2
+work_rate        = samplerate // data_length     # 24000
+
+duration         = 10          # seconds
+out_gain         = 0.3
+recording_amplitude = 1
 
 print(sd.query_devices())
 
-n_work = int(DURATION * WORK_RATE)         
+# ----------------------------------------------------------------------
+# SIGNALS
+# ----------------------------------------------------------------------
+n = int(duration * work_rate)
 
 
 def band_limited_noise(fmin, fmax, samples, rate):
@@ -34,70 +40,65 @@ def band_limited_noise(fmin, fmax, samples, rate):
     return sig / np.max(np.abs(sig))
 
 
-source_1 = band_limited_noise(200, 3000, n_work, WORK_RATE)
-source_2 = band_limited_noise(200, 3000, n_work, WORK_RATE)
+computed_source_signal1 = band_limited_noise(200, 3000, n, work_rate)
+computed_source_signal2 = band_limited_noise(200, 3000, n, work_rate)
 
-mic_signals = np.zeros((2, n_work))
+mic_signals = np.zeros((2, n))
 
-if USE_ASIO:
-    sd.default.device = DEVICE
-    sd.default.extra_settings = (sd.AsioSettings(channel_selectors=MIC_CHANNELS),
-                                 sd.AsioSettings(channel_selectors=SPEAKER_CHANNELS))
+# ----------------------------------------------------------------------
+# DEVICE
+# ----------------------------------------------------------------------
+sd.default.device = device
+asio_out = sd.AsioSettings(channel_selectors=speakers)
+asio_in = sd.AsioSettings(channel_selectors=microphones)
+sd.default.extra_settings = asio_in, asio_out
 
+input_device = sd.default.device
+output_device = sd.default.device
+
+# ----------------------------------------------------------------------
+# CALLBACK
+# ----------------------------------------------------------------------
 index = 0
-overrun_hits = 0
 
 
-def callback(indata, outdata, frames, time_info, status):
-    """One working-rate sample per call. outdata is held for DATA_LENGTH frames."""
-    global index, overrun_hits
+def callback(indata, outdata, frames, time, status):
+    global index
 
-    if status:
-        print(status, flush=True)
-
-    # --- the guard the original was missing: never index past the buffer
-    if index >= n_work:
+    if index >= n:                 # stop cleanly instead of IndexError
         outdata[:] = 0
         raise sd.CallbackStop
 
-    # send to speakers (zero-order hold across the whole block)
-    outdata[:, 0] = OUT_GAIN * source_1[index]
-    outdata[:, 1] = OUT_GAIN * source_2[index]
+    out_1 = computed_source_signal1[index:(index + 1)]
+    out_2 = computed_source_signal2[index:(index + 1)]
 
-    # record: mean over the block instead of indata[0], a crude but real
-    # anti-alias filter. Use indata[0, :] instead to match the original exactly.
-    mic_signals[0][index] = REC_AMPLITUDE * indata[:, 0].mean()
-    mic_signals[1][index] = REC_AMPLITUDE * indata[:, 1].mean()
+    ###### Send to speakers:
+    outdata[:, 0] = out_gain * out_1
+    outdata[:, 1] = out_gain * out_2
 
-    index += 1
+    ###### Record mics signals
+    mic_signals[0][index] = recording_amplitude * indata[0, 0]
+    mic_signals[1][index] = recording_amplitude * indata[0, 1]
 
+    index = index + 1
 
-done = threading.Event()
 
 try:
-    with sd.Stream(device=(DEVICE, DEVICE),
-                   channels=(2, 2),
-                   samplerate=SAMPLERATE,
-                   blocksize=DATA_LENGTH,
-                   dtype='float32',
-                   callback=callback,
-                   finished_callback=done.set) as stream:
-        print(f"working rate {WORK_RATE} Hz, "
-              f"latency {stream.latency[0]*1000:.1f}/{stream.latency[1]*1000:.1f} ms")
-        done.wait(timeout=DURATION + 5)
+    with sd.Stream(device=(input_device, output_device), channels=(2, 2),
+                   callback=callback, blocksize=data_length,
+                   samplerate=samplerate):
+        sd.sleep(int(duration * 1000))
 except KeyboardInterrupt:
     pass
 
-# `index` is the exact length - no np.nonzero() guessing needed
-n = index
-print(f"captured {n} / {n_work} samples ({n / WORK_RATE:.3f} s)")
-if n < n_work:
-    print("WARNING: stream ended early - check for xruns above")
+# ----------------------------------------------------------------------
+# SAVE
+# ----------------------------------------------------------------------
+mic1 = mic_signals[0][:index]
+mic2 = mic_signals[1][:index]
 
-mic_1 = mic_signals[0][:n]
-mic_2 = mic_signals[1][:n]
+print(f"captured {index} / {n} samples ({index / work_rate:.3f} s)")
 
-wavfile.write("mics_persample.wav",
-              WORK_RATE,
-              np.column_stack([mic_1, mic_2]).astype('float32'))
-np.save("mic_signals_persample.npy", mic_signals[:, :n])
+wavfile.write("mics.wav", work_rate,
+              np.column_stack([mic1, mic2]).astype('float32'))
+np.save("mic_signals.npy", mic_signals[:, :index])
