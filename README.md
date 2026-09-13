@@ -10,7 +10,7 @@ microphones through one full-duplex `sounddevice` callback on an ASIO card (test
 pip install sounddevice numpy scipy
 ```
 
-Windows plus an ASIO driver. `sd.AsioSettings` does not exist on macOS or Linux.
+Windows plus an ASIO driver. `sd.AsioSettings`.
 
 ## Setup
 
@@ -22,46 +22,11 @@ speakers    = [1, 2]    # ASIO output channels
 microphones = [1, 0]    # ASIO input channels
 ```
 
-These are the card's own channel indices, not positions in the stream.
-`microphones = [1, 0]` swaps which physical input lands in `mic_signals[0]` —
-check it before trusting any left/right result.
+These are the card's own channel indices.
 
-- `samplerate` must match the ASIO control panel or the stream won't open.
-- `data_length` is blocksize and decimation factor at once; changing it changes
-  `work_rate`, and everything downstream must use `work_rate`.
-- `out_gain` — `outdata` is float32 in [-1, 1], anything past that clips.
-- `duration` sizes the buffers, so the stream stops when the signal runs out.
 
-## Signals
 
-`computed_source_signal1` / `2` are band-limited noise, 200–3000 Hz, generated
-at `work_rate`. Swap in your own arrays of length `n`.
 
-## Output
-
-- `mics.wav` — two mic channels at `work_rate`
-- `mic_signals.npy` — raw floats, shape `(2, index)`
-
-## Notes
-
-**Let the card settle.** The original slept 6–8 s before each stream. If you
-loop over several measurements, put a `time.sleep(4)` between them rather than
-opening streams back to back — that is what keeps recorded lengths consistent
-run to run.
-
-**Recorded length** is `index`, exactly. No `np.max(np.nonzero(...))` trimming
-needed, which is good, because that silently truncates when the signal ends
-near zero.
-
-**The index guard** (`if index >= n`) is the one thing added to the original
-callback. Without it, one callback past the buffer raises `IndexError` inside
-the callback, PortAudio aborts the stream, and you get a short recording with
-no obvious cause. Remove it if you want the original behaviour back.
-
-**Latency is not compensated.** The mic sample read in callback *n* is not the
-response to what was sent in callback *n* — converter round trip plus time of
-flight sit in between. For impulse responses or ITD work, cross-correlate
-against the source arrays to find the real offset.
 
 **Aliasing.** `indata[0, 0]` keeps 1 of every 2 frames with no lowpass, so
 content above 12 kHz folds back into the band; the zero-order hold on output
