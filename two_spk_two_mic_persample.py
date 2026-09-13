@@ -1,12 +1,4 @@
 # -*- coding: utf-8 -*-
-"""
-Per-sample variant: same structure as the original WFS callback
-(blocksize = data_length, one working sample per callback), but
-bounds-safe and with the frame count tracked explicitly.
-
-Working rate is SAMPLERATE / DATA_LENGTH. The soundcard still runs
-at SAMPLERATE.
-"""
 
 import threading
 import numpy as np
@@ -30,7 +22,7 @@ REC_AMPLITUDE    = 1.0
 
 print(sd.query_devices())
 
-n_work = int(DURATION * WORK_RATE)         # samples at the working rate
+n_work = int(DURATION * WORK_RATE)         
 
 
 def band_limited_noise(fmin, fmax, samples, rate):
