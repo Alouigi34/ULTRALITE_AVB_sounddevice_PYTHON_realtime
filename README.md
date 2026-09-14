@@ -23,12 +23,3 @@ microphones = [1, 0]    # ASIO input channels
 ```
 
 These are the card's own channel indices.
-
-
-
-
-
-**Aliasing.** `indata[0, 0]` keeps 1 of every 2 frames with no lowpass, so
-content above 12 kHz folds back into the band; the zero-order hold on output
-puts an image near 24 kHz. With a 3 kHz working band neither is fatal, but both
-show up at the top of any spectrum you compute.
